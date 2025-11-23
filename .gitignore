@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Generated output files (from running the tool)
+example_hacker_news.md
+hacker_news*.md
+*_news.md
+test_output.md
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
