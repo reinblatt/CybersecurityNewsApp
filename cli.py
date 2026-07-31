@@ -7,11 +7,9 @@ from pathlib import Path
 import httpx
 from defusedxml import ElementTree
 
-from feed_fetcher import fetch_rss_feed
+from feed_fetcher import DEFAULT_FEED_URL, fetch_rss_feed
 from formatter import format_as_text_summary, format_for_notebooklm
 from parser import parse_rss_feed
-
-DEFAULT_FEED_URL = "https://feeds.feedburner.com/TheHackersNews"
 
 logging.basicConfig(
     level=logging.INFO,

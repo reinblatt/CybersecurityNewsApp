@@ -87,13 +87,10 @@ def _find_children(
 
 
 def _extract_text(element: Optional[Element], default: str = "") -> str:
-    """Extract text content from XML element."""
+    """Extract text content from XML element, including nested children."""
     if element is None:
         return default
-    text = element.text or ""
-    if element.tail:
-        text += element.tail
-    return text.strip()
+    return "".join(element.itertext()).strip()
 
 
 def _extract_cdata(element: Optional[Element]) -> str:
@@ -166,24 +163,33 @@ def parse_rss_feed(*, feed_content: bytes, encoding: str = "utf-8") -> ParsedFee
 
     Args:
         feed_content: Raw bytes of RSS feed XML
-        encoding: Character encoding (default: utf-8)
+        encoding: Fallback encoding used when the XML declaration is missing
+            or unsupported (default: utf-8)
 
     Returns:
         ParsedFeed object with metadata and items
 
     Raises:
         ElementTree.ParseError: On invalid XML
-        ValueError: On missing required feed elements
+        ValueError: On missing required feed elements or undecodable content
     """
     try:
-        xml_text = feed_content.decode(encoding)
-        root = ElementTree.fromstring(xml_text)
-    except UnicodeDecodeError as e:
-        logger.error(f"Failed to decode feed content with encoding '{encoding}': {e}")
-        raise ValueError(f"Failed to decode feed content with encoding '{encoding}'") from e
+        root = ElementTree.fromstring(feed_content)
     except ElementTree.ParseError as e:
-        logger.error(f"Failed to parse XML: {e}")
-        raise
+        logger.error(f"Failed to parse XML with declared encoding: {e}")
+        try:
+            xml_text = feed_content.decode(encoding)
+            root = ElementTree.fromstring(xml_text)
+        except UnicodeDecodeError as decode_err:
+            logger.error(
+                f"Failed to decode feed content with encoding '{encoding}': {decode_err}"
+            )
+            raise ValueError(
+                f"Failed to decode feed content with encoding '{encoding}'"
+            ) from decode_err
+        except ElementTree.ParseError:
+            logger.error(f"Failed to parse XML: {e}")
+            raise e
 
     channel = _find_child(root, "channel")
     if channel is None:

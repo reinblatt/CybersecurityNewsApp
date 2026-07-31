@@ -11,11 +11,10 @@ logger = logging.getLogger(__name__)
 
 
 def _format_datetime(dt: datetime) -> str:
-    """Format a datetime for display, converting timezones when present."""
+    """Format a datetime as UTC for display, assuming naive values are UTC."""
     if dt.tzinfo is not None:
         dt = dt.astimezone(timezone.utc)
-        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-    return dt.strftime("%Y-%m-%d %H:%M:%S")
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 def _truncate(text: str, max_len: int = 200) -> str:

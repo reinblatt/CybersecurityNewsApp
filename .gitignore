@@ -9,7 +9,8 @@ __pycache__/
 venv/
 env/
 ENV/
-.venv
+.venv/
+.venv-wsl/
 
 # IDE
 .vscode/
@@ -21,6 +22,7 @@ ENV/
 # Generated output files (from running the tool)
 example_hacker_news.md
 hacker_news*.md
+news.md
 *_news.md
 test_output.md
 

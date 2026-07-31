@@ -3,7 +3,13 @@ import pytest
 from defusedxml import ElementTree
 
 from parser import parse_rss_feed
-from tests.fixtures import INVALID_XML, NAMESPACED_RSS_FEED, SAMPLE_RSS_FEED, UTF8_RSS_FEED
+from tests.fixtures import (
+    INVALID_XML,
+    LATIN1_RSS_FEED,
+    NAMESPACED_RSS_FEED,
+    SAMPLE_RSS_FEED,
+    UTF8_RSS_FEED,
+)
 
 
 def test_parse_rss_feed_extracts_metadata_and_items():
@@ -47,6 +53,20 @@ def test_parse_rss_feed_rejects_invalid_xml():
         parse_rss_feed(feed_content=INVALID_XML)
 
 
-def test_parse_rss_feed_rejects_invalid_encoding():
+def test_parse_rss_feed_honors_xml_declared_encoding():
+    parsed = parse_rss_feed(feed_content=UTF8_RSS_FEED)
+
+    assert parsed.metadata.title == "Café Security News"
+    assert parsed.items[0].title == "Unicode Article — Details"
+
+
+def test_parse_rss_feed_falls_back_to_encoding_param():
+    parsed = parse_rss_feed(feed_content=LATIN1_RSS_FEED, encoding="latin-1")
+
+    assert parsed.metadata.title == "Café Security News"
+    assert parsed.items[0].title == "Résumé of Attacks"
+
+
+def test_parse_rss_feed_rejects_undecodable_content():
     with pytest.raises(ValueError, match="Failed to decode"):
-        parse_rss_feed(feed_content=UTF8_RSS_FEED, encoding="ascii")
+        parse_rss_feed(feed_content=LATIN1_RSS_FEED, encoding="ascii")

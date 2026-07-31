@@ -7,6 +7,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_FEED_URL = "https://feeds.feedburner.com/TheHackersNews"
 DEFAULT_MAX_CONTENT_BYTES = 10 * 1024 * 1024  # 10 MB
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
 
@@ -102,16 +103,16 @@ async def fetch_rss_feed(
                 )
                 if not _is_retryable_status(status_code):
                     raise
-                if attempt == max_retries:
+                if attempt < max_retries:
+                    await _backoff(attempt)
+                else:
                     raise
-                await _backoff(attempt)
 
             except httpx.RequestError as e:
                 logger.warning(
                     f"Request error on attempt {attempt}/{max_retries}: {e}"
                 )
-                if attempt == max_retries:
+                if attempt < max_retries:
+                    await _backoff(attempt)
+                else:
                     raise
-                await _backoff(attempt)
-
-    raise RuntimeError("Failed to fetch feed after all retries")

@@ -60,3 +60,16 @@ UTF8_RSS_FEED = """<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>
 """.encode("utf-8")
+
+LATIN1_RSS_FEED = """<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>Café Security News</title>
+    <link>https://example.com</link>
+    <item>
+      <title>Résumé of Attacks</title>
+      <link>https://example.com/latin1</link>
+    </item>
+  </channel>
+</rss>
+""".encode("latin-1")

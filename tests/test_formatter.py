@@ -102,9 +102,9 @@ def test_format_datetime_converts_timezone_aware_values():
     assert _format_datetime(dt) == "2024-01-01 10:00:00 UTC"
 
 
-def test_format_datetime_leaves_naive_values_unlabeled():
+def test_format_datetime_labels_naive_values_as_utc():
     dt = datetime(2024, 1, 1, 10, 0)
-    assert _format_datetime(dt) == "2024-01-01 10:00:00"
+    assert _format_datetime(dt) == "2024-01-01 10:00:00 UTC"
 
 
 def test_truncate_only_when_needed():

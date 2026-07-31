@@ -1,0 +1,4 @@
+---
+Current Branch: main
+Modified Files (M): .gitignore, RECREATION_PROMPT.md, cli.py, example_usage.py, feed_fetcher.py, formatter.py, parser.py, tests/fixtures.py, tests/test_formatter.py, tests/test_parser.py
+Git Status shows 10 modified files in the repository.

@@ -90,7 +90,7 @@ Create the following files:
   - `encoding: str = "utf-8"` (optional)
 - **Returns**: `ParsedFeed` object
 - **Behavior**:
-  - Parse XML using `xml.etree.ElementTree`
+  - Parse XML using `defusedxml.ElementTree` (secure wrapper around `xml.etree.ElementTree`), honoring the encoding declared in the XML
   - Handle RSS 2.0 format (look for `<channel>` element)
   - Extract feed metadata from channel element:
     - `title`, `link`, `description`, `lastBuildDate`, `language`
@@ -148,7 +148,7 @@ Create the following files:
   - Only include metadata section if `include_metadata=True`
   - Limit items if `max_items` specified
 
-**Function**: `format_as_json_summary()`
+**Function**: `format_as_text_summary()`
 - **Parameters**:
   - `parsed_feed: ParsedFeed` (required, keyword-only)
   - `max_items: Optional[int] = None` (optional)
@@ -189,7 +189,7 @@ Create the following files:
 - Parse feed using `parse_rss_feed()`
 - Format output based on `--format` argument:
   - `"markdown"`: Use `format_for_notebooklm()`
-  - `"summary"`: Use `format_as_json_summary()`
+  - `"summary"`: Use `format_as_text_summary()`
 - Write to file if `--output` specified, else print to stdout
 - Handle exceptions and log errors
 - Return exit code
@@ -227,7 +227,7 @@ Create the following files:
 **Dependencies** (with minimum versions):
 ```
 httpx>=0.27.0
-lxml>=5.1.0
+defusedxml>=0.7.1
 pydantic>=2.9.0
 python-dateutil>=2.9.0
 ```
@@ -329,7 +329,7 @@ After recreating the codebase, verify:
 ## Key Implementation Details
 
 - Use `httpx.AsyncClient` with `follow_redirects=True`
-- Use `xml.etree.ElementTree` for XML parsing (not lxml directly, but lxml should be installed)
+- Use `defusedxml.ElementTree` (a secure wrapper around `xml.etree.ElementTree`) for XML parsing, with namespace-aware tag matching
 - Use `dateutil.parser.parse()` for flexible date parsing
 - Use Pydantic v2 syntax (`field_validator` with `mode="before"`)
 - Handle CDATA sections in RSS descriptions
