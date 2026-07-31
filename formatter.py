@@ -1,11 +1,28 @@
 """Formatter module for converting parsed feeds to NotebookLM-compatible formats."""
 import logging
-from datetime import datetime
+import re
+from datetime import datetime, timezone
+from html import unescape
 from typing import Optional
 
-from parser import NewsItem, ParsedFeed
+from parser import ParsedFeed
 
 logger = logging.getLogger(__name__)
+
+
+def _format_datetime(dt: datetime) -> str:
+    """Format a datetime for display, converting timezones when present."""
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc)
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _truncate(text: str, max_len: int = 200) -> str:
+    """Truncate text with an ellipsis only when it exceeds max_len."""
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "..."
 
 
 def format_for_notebooklm(
@@ -37,7 +54,7 @@ def format_for_notebooklm(
             lines.append(f"**Website:** {parsed_feed.metadata.link}")
         if parsed_feed.metadata.last_build_date:
             lines.append(
-                f"**Last Updated:** {parsed_feed.metadata.last_build_date.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                f"**Last Updated:** {_format_datetime(parsed_feed.metadata.last_build_date)}"
             )
         lines.append("")
         lines.append("---")
@@ -52,11 +69,10 @@ def format_for_notebooklm(
         lines.append("")
 
         if item.pub_date:
-            lines.append(f"**Published:** {item.pub_date.strftime('%Y-%m-%d %H:%M:%S UTC')}")
+            lines.append(f"**Published:** {_format_datetime(item.pub_date)}")
             lines.append("")
 
         if item.description:
-            # Clean up HTML tags from description (basic removal)
             description = _clean_html(item.description)
             lines.append(description)
             lines.append("")
@@ -78,13 +94,13 @@ def format_for_notebooklm(
     return "\n".join(lines)
 
 
-def format_as_json_summary(
+def format_as_text_summary(
     *,
     parsed_feed: ParsedFeed,
     max_items: Optional[int] = None,
 ) -> str:
     """
-    Format parsed feed as a JSON-like summary for NotebookLM.
+    Format parsed feed as a compact plain-text summary.
 
     Args:
         parsed_feed: Parsed feed data
@@ -111,7 +127,7 @@ def format_as_json_summary(
             lines.append(f"   Date: {item.pub_date.strftime('%Y-%m-%d')}")
         lines.append(f"   URL: {item.link}")
         if item.description:
-            desc = _clean_html(item.description)[:200] + "..."
+            desc = _truncate(_clean_html(item.description))
             lines.append(f"   Summary: {desc}")
         lines.append("")
 
@@ -128,14 +144,7 @@ def _clean_html(text: str) -> str:
     Returns:
         Plain text with HTML removed
     """
-    import re
-    from html import unescape
-
-    # Remove HTML tags
     text = re.sub(r"<[^>]+>", "", text)
-    # Decode HTML entities
     text = unescape(text)
-    # Clean up whitespace
     text = re.sub(r"\s+", " ", text).strip()
     return text
-

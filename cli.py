@@ -1,15 +1,16 @@
-"""Command-line interface for the Hacker News RSS tool."""
+"""Command-line interface for the Cybersecurity News RSS tool."""
 import argparse
 import asyncio
 import logging
 import sys
 from pathlib import Path
+import httpx
+from defusedxml import ElementTree
 
 from feed_fetcher import fetch_rss_feed
-from formatter import format_for_notebooklm, format_as_json_summary
+from formatter import format_as_text_summary, format_for_notebooklm
 from parser import parse_rss_feed
 
-# Default feed URL
 DEFAULT_FEED_URL = "https://feeds.feedburner.com/TheHackersNews"
 
 logging.basicConfig(
@@ -17,6 +18,14 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _positive_int(value: str) -> int:
+    """Argparse type that accepts positive integers only."""
+    parsed = int(value)
+    if parsed < 1:
+        raise argparse.ArgumentTypeError("must be a positive integer")
+    return parsed
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -30,7 +39,6 @@ async def main_async(args: argparse.Namespace) -> int:
         Exit code (0 for success, non-zero for error)
     """
     try:
-        # Fetch feed
         logger.info(f"Fetching feed from {args.feed_url}")
         feed_data = await fetch_rss_feed(
             feed_url=args.feed_url,
@@ -38,13 +46,11 @@ async def main_async(args: argparse.Namespace) -> int:
             max_retries=args.retries,
         )
 
-        # Parse feed
         logger.info("Parsing RSS feed content")
         parsed_feed = parse_rss_feed(feed_content=feed_data["content"])
 
         logger.info(f"Found {len(parsed_feed.items)} news items")
 
-        # Format output
         if args.format == "markdown":
             output = format_for_notebooklm(
                 parsed_feed=parsed_feed,
@@ -52,7 +58,7 @@ async def main_async(args: argparse.Namespace) -> int:
                 include_metadata=not args.no_metadata,
             )
         elif args.format == "summary":
-            output = format_as_json_summary(
+            output = format_as_text_summary(
                 parsed_feed=parsed_feed,
                 max_items=args.max_items,
             )
@@ -60,7 +66,6 @@ async def main_async(args: argparse.Namespace) -> int:
             logger.error(f"Unknown format: {args.format}")
             return 1
 
-        # Write output
         if args.output:
             output_path = Path(args.output)
             output_path.write_text(output, encoding="utf-8")
@@ -70,15 +75,24 @@ async def main_async(args: argparse.Namespace) -> int:
 
         return 0
 
-    except Exception as e:
-        logger.error(f"Error processing feed: {e}", exc_info=args.verbose)
-        return 1
+    except ValueError as e:
+        logger.error(f"Invalid input or feed data: {e}")
+        return 2
+    except ElementTree.ParseError as e:
+        logger.error(f"Failed to parse RSS XML: {e}")
+        return 3
+    except httpx.HTTPError as e:
+        logger.error(f"Network error fetching feed: {e}")
+        return 4
+    except OSError as e:
+        logger.error(f"Failed to write output file: {e}")
+        return 5
 
 
 def main() -> int:
     """Main entry point for CLI."""
     parser = argparse.ArgumentParser(
-        description="Fetch and format Hacker News RSS feed for NotebookLM",
+        description="Fetch and format cybersecurity RSS feeds for NotebookLM",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -105,7 +119,7 @@ def main() -> int:
 
     parser.add_argument(
         "--max-items",
-        type=int,
+        type=_positive_int,
         default=None,
         help="Maximum number of items to include (default: all)",
     )
@@ -147,4 +161,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-

@@ -2,9 +2,10 @@
 import logging
 from datetime import datetime
 from typing import Any, Optional
-from xml.etree import ElementTree
+from xml.etree.ElementTree import Element
 
 from dateutil import parser as date_parser
+from defusedxml import ElementTree
 from pydantic import BaseModel, Field, field_validator
 
 logger = logging.getLogger(__name__)
@@ -55,7 +56,37 @@ class ParsedFeed(BaseModel):
     items: list[NewsItem] = Field(default_factory=list)
 
 
-def _extract_text(element: Optional[ElementTree.Element], default: str = "") -> str:
+def _tag_local_name(tag: str) -> str:
+    """Return the local XML tag name without namespace prefix."""
+    if tag.startswith("{"):
+        return tag.split("}", 1)[1]
+    return tag
+
+
+def _find_child(
+    parent: Optional[Element], local_name: str
+) -> Optional[Element]:
+    """Find a direct child element by local tag name."""
+    if parent is None:
+        return None
+    for child in parent:
+        if _tag_local_name(child.tag) == local_name:
+            return child
+    return None
+
+
+def _find_children(
+    parent: Optional[Element], local_name: str
+) -> list[Element]:
+    """Find all direct child elements matching a local tag name."""
+    if parent is None:
+        return []
+    return [
+        child for child in parent if _tag_local_name(child.tag) == local_name
+    ]
+
+
+def _extract_text(element: Optional[Element], default: str = "") -> str:
     """Extract text content from XML element."""
     if element is None:
         return default
@@ -65,14 +96,12 @@ def _extract_text(element: Optional[ElementTree.Element], default: str = "") -> 
     return text.strip()
 
 
-def _extract_cdata(element: Optional[ElementTree.Element]) -> str:
+def _extract_cdata(element: Optional[Element]) -> str:
     """Extract CDATA content from XML element."""
     if element is None:
         return ""
-    # CDATA is stored in text, but we need to handle nested elements
     if element.text:
         return element.text.strip()
-    # Fallback to concatenating all text
     return "".join(element.itertext()).strip()
 
 
@@ -84,6 +113,51 @@ def _parse_date(date_str: Optional[str]) -> Optional[datetime]:
         return date_parser.parse(date_str)
     except (ValueError, TypeError):
         return None
+
+
+def _parse_rss_channel(channel: Element) -> ParsedFeed:
+    """Parse an RSS 2.0 channel element."""
+    metadata = FeedMetadata(
+        title=_extract_text(_find_child(channel, "title"), "Unknown Feed"),
+        link=_extract_text(_find_child(channel, "link"), ""),
+        description=_extract_text(_find_child(channel, "description"), ""),
+        last_build_date=_parse_date(
+            _extract_text(_find_child(channel, "lastBuildDate"))
+        ),
+        language=_extract_text(_find_child(channel, "language")) or None,
+    )
+
+    items: list[NewsItem] = []
+    for item_elem in _find_children(channel, "item"):
+        title = _extract_text(_find_child(item_elem, "title"), "")
+        link = _extract_text(_find_child(item_elem, "link"), "")
+        description = _extract_cdata(_find_child(item_elem, "description"))
+        pub_date = _parse_date(_extract_text(_find_child(item_elem, "pubDate")))
+        author = _extract_text(_find_child(item_elem, "author"))
+        guid_elem = _find_child(item_elem, "guid")
+        guid = _extract_text(guid_elem) if guid_elem is not None else None
+
+        categories = [
+            _extract_text(cat_elem)
+            for cat_elem in _find_children(item_elem, "category")
+            if _extract_text(cat_elem)
+        ]
+
+        if title and link:
+            items.append(
+                NewsItem(
+                    title=title,
+                    link=link,
+                    description=description,
+                    pub_date=pub_date,
+                    author=author if author else None,
+                    guid=guid,
+                    categories=categories,
+                )
+            )
+
+    logger.info(f"Parsed {len(items)} news items from RSS feed")
+    return ParsedFeed(metadata=metadata, items=items)
 
 
 def parse_rss_feed(*, feed_content: bytes, encoding: str = "utf-8") -> ParsedFeed:
@@ -102,61 +176,17 @@ def parse_rss_feed(*, feed_content: bytes, encoding: str = "utf-8") -> ParsedFee
         ValueError: On missing required feed elements
     """
     try:
-        root = ElementTree.fromstring(feed_content)
+        xml_text = feed_content.decode(encoding)
+        root = ElementTree.fromstring(xml_text)
+    except UnicodeDecodeError as e:
+        logger.error(f"Failed to decode feed content with encoding '{encoding}': {e}")
+        raise ValueError(f"Failed to decode feed content with encoding '{encoding}'") from e
     except ElementTree.ParseError as e:
         logger.error(f"Failed to parse XML: {e}")
         raise
 
-    # Handle RSS 2.0 format
-    channel = root.find("channel")
+    channel = _find_child(root, "channel")
     if channel is None:
         raise ValueError("RSS feed missing required 'channel' element")
 
-    # Extract metadata
-    title_elem = channel.find("title")
-    link_elem = channel.find("link")
-    desc_elem = channel.find("description")
-    build_date_elem = channel.find("lastBuildDate")
-    lang_elem = channel.find("language")
-
-    metadata = FeedMetadata(
-        title=_extract_text(title_elem, "Unknown Feed"),
-        link=_extract_text(link_elem, ""),
-        description=_extract_text(desc_elem, ""),
-        last_build_date=_parse_date(_extract_text(build_date_elem)),
-        language=_extract_text(lang_elem),
-    )
-
-    # Extract items
-    items = []
-    for item_elem in channel.findall("item"):
-        title = _extract_text(item_elem.find("title"), "")
-        link = _extract_text(item_elem.find("link"), "")
-        description = _extract_cdata(item_elem.find("description"))
-        pub_date = _parse_date(_extract_text(item_elem.find("pubDate")))
-        author = _extract_text(item_elem.find("author"))
-        guid_elem = item_elem.find("guid")
-        guid = _extract_text(guid_elem) if guid_elem is not None else None
-
-        # Extract categories
-        categories = [
-            _extract_text(cat_elem)
-            for cat_elem in item_elem.findall("category")
-            if _extract_text(cat_elem)
-        ]
-
-        if title and link:  # Only add items with required fields
-            news_item = NewsItem(
-                title=title,
-                link=link,
-                description=description,
-                pub_date=pub_date,
-                author=author if author else None,
-                guid=guid,
-                categories=categories,
-            )
-            items.append(news_item)
-
-    logger.info(f"Parsed {len(items)} news items from feed")
-    return ParsedFeed(metadata=metadata, items=items)
-
+    return _parse_rss_channel(channel)

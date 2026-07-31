@@ -1,12 +1,14 @@
-# Hacker News RSS Tool
+# Cybersecurity News RSS Tool
 
-A Python tool for fetching and formatting The Hacker News RSS feed for use with NotebookLM and other AI tools.
+A Python tool for fetching and formatting cybersecurity RSS feeds (default: The Hacker News) for use with NotebookLM and other AI tools.
 
 ## Features
 
-- Async RSS feed fetching with retry logic
-- Structured parsing with Pydantic models
-- Multiple output formats (Markdown, Summary)
+- Async RSS feed fetching with exponential backoff retry logic
+- Structured parsing with Pydantic models and namespace-aware XML handling
+- Safe XML parsing via `defusedxml`
+- Response size limits to guard against oversized payloads
+- Multiple output formats (Markdown, plain-text summary)
 - Type-safe with full type hints
 - Error handling and logging
 - CLI interface
@@ -17,6 +19,12 @@ A Python tool for fetching and formatting The Hacker News RSS feed for use with 
 pip install -r requirements.txt
 ```
 
+Or install as an editable package with dev dependencies:
+
+```bash
+pip install -e ".[dev]"
+```
+
 ## Usage
 
 ### Basic Usage
@@ -25,6 +33,12 @@ Fetch and display the latest news:
 
 ```bash
 python cli.py
+```
+
+Or after installation:
+
+```bash
+cybernews
 ```
 
 ### Save to File
@@ -75,13 +89,13 @@ Full markdown document with metadata and formatted articles. Best for NotebookLM
 
 ### Summary Format
 
-Compact text summary with article titles, dates, and URLs.
+Compact plain-text summary with article titles, dates, and URLs.
 
 ## Integration with NotebookLM
 
 1. Run the tool to generate a markdown file:
    ```bash
-   python cli.py --output hacker_news.md
+   python cli.py --output cybersecurity_news.md
    ```
 
 2. Upload the generated markdown file to NotebookLM
@@ -100,26 +114,37 @@ Compact text summary with article titles, dates, and URLs.
 ├── feed_fetcher.py     # Async RSS feed fetching
 ├── parser.py           # RSS XML parsing with Pydantic models
 ├── formatter.py        # Output formatting for NotebookLM
+├── tests/              # Pytest test suite
+├── pyproject.toml      # Project metadata and tooling config
 ├── requirements.txt    # Python dependencies
-└── README.md          # This file
+└── README.md           # This file
+```
+
+## Testing
+
+Run the test suite:
+
+```bash
+pytest
 ```
 
 ## Dependencies
 
 - `httpx`: Async HTTP client
-- `lxml`: XML parsing (via ElementTree)
+- `defusedxml`: Safe XML parsing
 - `pydantic`: Data validation and models
 - `python-dateutil`: Date parsing
 
 ## Error Handling
 
 The tool includes:
-- Network retry logic
+- Network retry logic with exponential backoff (retries 5xx/429 only)
+- Response size limits (default 10 MB)
+- Safe XML parsing with `defusedxml`
 - XML parsing error handling
 - Input validation
-- Structured logging
+- Structured logging with distinct exit codes
 
 ## License
 
 MIT
-
