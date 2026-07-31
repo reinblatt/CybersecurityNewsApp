@@ -1,0 +1,2 @@
+[console_scripts]
+cybernews = cli:main
