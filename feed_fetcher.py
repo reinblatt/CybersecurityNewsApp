@@ -1,6 +1,8 @@
 """RSS feed fetcher module for cybersecurity news."""
 import asyncio
 import logging
+import socket
+from ipaddress import ip_address, IPv6Address
 from urllib.parse import urlparse
 
 import httpx
@@ -10,6 +12,47 @@ logger = logging.getLogger(__name__)
 DEFAULT_FEED_URL = "https://feeds.feedburner.com/TheHackersNews"
 DEFAULT_MAX_CONTENT_BYTES = 10 * 1024 * 1024  # 10 MB
 RETRYABLE_STATUS_CODES = frozenset({429, 500, 502, 503, 504})
+
+
+def _is_blocked_ip(ip_str: str) -> bool:
+    """Check if an IP address is in a blocked range (private, loopback, link-local)."""
+    try:
+        ip = ip_address(ip_str)
+        if ip.is_loopback or ip.is_private or ip.is_link_local:
+            return True
+        if isinstance(ip, IPv6Address) and (ip.is_multicast or ip.is_reserved):
+            return True
+        return False
+    except ValueError:
+        return False
+
+
+def _resolve_and_validate_host(hostname: str) -> None:
+    """Resolve hostname and validate against blocked IP ranges."""
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+        for info in infos:
+            ip = info[4][0]
+            if _is_blocked_ip(ip):
+                raise ValueError(f"Access to private/internal IP blocked: {ip}")
+    except socket.gaierror as e:
+        raise ValueError(f"Failed to resolve hostname: {e}") from e
+
+
+def _validate_feed_url(feed_url: str) -> None:
+    """Validate feed URL against SSRF protections."""
+    parsed = urlparse(feed_url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"Invalid URL format: {feed_url}")
+
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError(f"Only HTTP/HTTPS schemes allowed: {feed_url}")
+
+    hostname = parsed.hostname or ""
+    if not hostname:
+        raise ValueError(f"Missing hostname: {feed_url}")
+
+    _resolve_and_validate_host(hostname)
 
 
 def _is_retryable_status(status_code: int) -> bool:
@@ -61,13 +104,11 @@ async def fetch_rss_feed(
     if max_retries < 1:
         raise ValueError("max_retries must be at least 1")
 
-    parsed = urlparse(feed_url)
-    if not parsed.scheme or not parsed.netloc:
-        raise ValueError(f"Invalid URL format: {feed_url}")
+    _validate_feed_url(feed_url)
 
     logger.info(f"Fetching RSS feed from {feed_url}")
 
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         for attempt in range(1, max_retries + 1):
             try:
                 response = await client.get(feed_url)

@@ -145,6 +145,42 @@ The tool includes:
 - Input validation
 - Structured logging with distinct exit codes
 
+## Security
+
+### OWASP A10: SSRF Mitigation
+
+The feed fetcher validates URLs before making requests:
+- Only `http`/`https` schemes are allowed
+- Hostnames are resolved and blocked if they map to private, loopback,
+  link-local, or reserved IP ranges (e.g. `10.0.0.0/8`, `169.254.169.254`,
+  `127.0.0.1`, `::1`)
+- Redirects are not followed automatically, preventing SSRF via
+  redirect-to-internal endpoints
+
+### OWASP A08: Software Integrity
+
+Supply-chain tooling is included in the `security` extra:
+
+```bash
+pip install -e ".[security]"
+```
+
+- **Vulnerability scanning** with `pip-audit`:
+
+  ```bash
+  pip-audit
+  ```
+
+- **SBOM generation** with `cyclonedx-bom`:
+
+  ```bash
+  python -m cyclonedx_py requirements --pyproject pyproject.toml -o sbom.json
+  ```
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs tests across
+Python 3.10-3.13, audits dependencies with `pip-audit`, and uploads a
+CycloneDX SBOM artifact on every push and weekly.
+
 ## License
 
 MIT

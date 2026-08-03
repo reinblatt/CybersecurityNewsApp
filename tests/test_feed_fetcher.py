@@ -6,7 +6,10 @@ import pytest
 
 from feed_fetcher import (
     DEFAULT_MAX_CONTENT_BYTES,
+    _is_blocked_ip,
     _is_retryable_status,
+    _resolve_and_validate_host,
+    _validate_feed_url,
     fetch_rss_feed,
 )
 
@@ -112,3 +115,49 @@ async def test_fetch_rss_feed_rejects_oversized_response():
 async def test_fetch_rss_feed_rejects_invalid_url():
     with pytest.raises(ValueError, match="Invalid URL format"):
         await fetch_rss_feed(feed_url="not-a-url")
+
+
+def test_is_blocked_ip_private_ranges():
+    assert _is_blocked_ip("10.0.0.1") is True
+    assert _is_blocked_ip("172.16.0.1") is True
+    assert _is_blocked_ip("192.168.1.1") is True
+    assert _is_blocked_ip("127.0.0.1") is True
+    assert _is_blocked_ip("169.254.0.1") is True
+    assert _is_blocked_ip("::1") is True
+    assert _is_blocked_ip("fe80::1") is True
+    assert _is_blocked_ip("fc00::1") is True
+
+
+def test_is_blocked_ip_public_allowed():
+    assert _is_blocked_ip("8.8.8.8") is False
+    assert _is_blocked_ip("1.1.1.1") is False
+    assert _is_blocked_ip("2001:4860:4860::8888") is False
+
+
+@pytest.mark.asyncio
+async def test_validate_feed_url_blocks_private_ips():
+    with patch("feed_fetcher.socket.getaddrinfo") as mock_getaddrinfo:
+        mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.1", 0))]
+        with pytest.raises(ValueError, match="Access to private/internal IP blocked"):
+            _validate_feed_url("http://internal.example.com/feed.xml")
+
+
+@pytest.mark.asyncio
+async def test_validate_feed_url_allows_public_ips():
+    with patch("feed_fetcher.socket.getaddrinfo") as mock_getaddrinfo:
+        mock_getaddrinfo.return_value = [(2, 1, 6, "", ("8.8.8.8", 0))]
+        _validate_feed_url("https://example.com/feed.xml")
+
+
+@pytest.mark.asyncio
+async def test_validate_feed_url_rejects_non_http_scheme():
+    with pytest.raises(ValueError, match="Only HTTP/HTTPS schemes allowed"):
+        _validate_feed_url("ftp://example.com/feed.xml")
+
+
+@pytest.mark.asyncio
+async def test_fetch_rss_feed_blocks_private_ip():
+    with patch("feed_fetcher.socket.getaddrinfo") as mock_getaddrinfo:
+        mock_getaddrinfo.return_value = [(2, 1, 6, "", ("10.0.0.1", 0))]
+        with pytest.raises(ValueError, match="Access to private/internal IP blocked"):
+            await fetch_rss_feed(feed_url="http://internal.example.com/feed.xml")
